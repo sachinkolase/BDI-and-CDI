@@ -1,0 +1,72 @@
+bdi<-read.csv("bdi_cdi.csv")
+install.packages('dplyr')
+require(dplyr)
+
+#taking columns which are required to us
+required<-select(bdi,Segment,Brand,Order.type)
+
+#Segregating category wise
+#We have three categories- home,student and office
+
+home<-filter(required,Segment=="home")
+
+student<-filter(required,Segment=="student")
+
+office<-filter(required,Segment=="office")
+
+# Now in each category we will count sigle order and multiple orders brand wise
+# We have 7 brands in total- Dominoz,Burger king,sub way,MacD,papa jones,Pizza hut and other
+
+home_brand<-count(home,Brand,Order.type)
+
+office_brand<-count(office,Brand,Order.type)
+
+student_brand<-count(student,Brand,Order.type)
+
+#Calculating total orders for all categories
+
+Allcategory<-count(required,Segment,Order.type)
+
+Allcategory<-mutate(Allcategory,Total_sales=ifelse(Order.type=="Multiple order combinations",2*n,n))
+
+#Calculating category wise total sales
+Cat_household_sales<-Allcategory %>% group_by(Segment) %>% summarise(Total_households=sum(n),Total_cat_sales=sum(Total_sales))
+
+#Calculating category developement index
+CDI_cat<-merge(Cat_household_sales %>% group_by(Segment) %>% summarise(CDI=(Total_households/Total_cat_sales)/0.67),Cat_household_sales,by="Segment")
+
+#Calculating sales for category,brandwise
+#For home
+home_brand<-mutate(home_brand,Total_sales=ifelse(Order.type=="Multiple order combinations",2*n,n))
+home_brand_sales<-home_brand %>% group_by(Brand) %>% summarise(Total_households=sum(n),brd_sales=sum(Total_sales))
+
+#for office
+office_brand<-mutate(office_brand,Total_sales=ifelse(Order.type=="Multiple order combinations",2*n,n))
+office_brand_sales<-office_brand %>% group_by(Brand) %>% summarise(Total_households_office= sum(n),brd_sales_office=sum(Total_sales))
+
+#for student
+student_brand<-mutate(student_brand,Total_sales=ifelse(Order.type=="Multiple order combinations",2*n,n))
+student_brand_sales<-student_brand %>% group_by(Brand) %>% summarise(Total_households_student=sum(n),brd_sales_student=sum(Total_sales))
+
+#Combining household and sales for each brand with category
+fnl<-merge(merge(office_brand_sales,student_brand_sales,by="Brand"),home_brand_sales,by="Brand")
+fnl$total_brand_sale<-NULL
+fnl$total_brand_sale<-fnl$brd_sales_office+fnl$brd_sales_student+fnl$brd_sales
+
+dummy<-fnl
+
+#Brand developement index for each brand for 3 categories
+BDI_office<-dummy %>% group_by(Brand) %>% summarise(bdi_office=(brd_sales_office/42)/(total_brand_sale/150))
+
+BDI_studnt<-dummy %>% group_by(Brand) %>% summarise(bdi_studnt=(brd_sales_student/54)/(total_brand_sale/150))
+
+BDI_home<-dummy %>% group_by(Brand) %>% summarise(bdi_home=(brd_sales/54)/(total_brand_sale/150))
+
+Answer_bdi<-merge(merge(merge(BDI_home,BDI_office,by="Brand"),BDI_studnt,by="Brand"),fnl,by="Brand")
+
+
+#Optional Graph
+require(ggplot2)
+
+#plot of brand developement index for all categoroies
+ggplot(Answer_bdi,aes(x=Brand))+geom_point(aes(y=bdi_office),colour="blue")+geom_point(aes(y=bdi_home),colour="red")+geom_point(aes(y=bdi_studnt),colour="green")
